@@ -57,6 +57,7 @@ import com.android.launcher3.util.NavigationMode;
 import com.android.launcher3.util.ResourceBasedOverride;
 import com.android.launcher3.util.WindowBounds;
 
+
 /**
  * Utility class for mocking some window manager behaviours
  */
@@ -181,10 +182,18 @@ public class WindowManagerProxy implements ResourceBasedOverride {
         }
 
         WindowInsets result = insetsBuilder.build();
-        Insets systemWindowInsets = result.getInsetsIgnoringVisibility(
-                WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-        outInsets.set(systemWindowInsets.left, systemWindowInsets.top, systemWindowInsets.right,
-                systemWindowInsets.bottom);
+//        Insets systemWindowInsets = result.getInsetsIgnoringVisibility(
+//                WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+//        outInsets.set(systemWindowInsets.left, systemWindowInsets.top, systemWindowInsets.right,
+//                systemWindowInsets.bottom);
+        Insets cut = result.getInsets(WindowInsets.Type.displayCutout());
+
+        int top = result.getInsets(WindowInsets.Type.statusBars()).top;
+        int bottom = result.getInsets(WindowInsets.Type.navigationBars()).bottom;
+
+        Log.d(TAG, " HSH cutTop=" + cut.top + " top= " + top + " bottom=" + bottom);
+
+        outInsets.set(cut.left, 0, cut.right, bottom);
         return result;
     }
 

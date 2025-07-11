@@ -239,6 +239,21 @@ import java.util.function.Predicate;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
 
+import android.graphics.Color;
+import android.view.Gravity;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import com.android.launcher3.tepari.FullScreenLinearLayout;
+import android.widget.TextView;
+import com.android.launcher3.DeviceProfile;
+import android.view.Window;
+import android.view.WindowManager;
+import android.widget.LinearLayout;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
+
 /**
  * Default launcher application.
  */
@@ -509,6 +524,9 @@ public class Launcher extends StatefulActivity<LauncherState>
             }
         }
         restoreState(savedInstanceState);
+
+        mOnInitialBindListener = null;
+
         mStateManager.reapplyState();
 
         if (savedInstanceState != null) {
@@ -518,21 +536,23 @@ public class Launcher extends StatefulActivity<LauncherState>
             }
         }
 
-        if (!mModel.addCallbacksAndLoad(this)) {
-            if (!internalStateHandled) {
-                // If we are not binding synchronously, pause drawing until initial bind complete,
-                // so that the system could continue to show the device loading prompt
-                mOnInitialBindListener = Boolean.FALSE::booleanValue;
-            }
-        }
-
         // For handling default keys
         setDefaultKeyMode(DEFAULT_KEYS_SEARCH_LOCAL);
 
         setContentView(getRootView());
-        if (mOnInitialBindListener != null) {
-            getRootView().getViewTreeObserver().addOnPreDrawListener(mOnInitialBindListener);
+
+        getRootView().getViewTreeObserver()
+                .removeOnPreDrawListener(mOnInitialBindListener);
+
+        int loadingId = getResources().getIdentifier("loading_workspace", "id", getPackageName());
+        if (loadingId != 0) {
+            View loading = findViewById(loadingId);
+            if (loading != null) {
+                loading.clearAnimation();
+                loading.setVisibility(View.GONE);
+            }
         }
+
         getRootView().dispatchInsets();
 
         // Listen for screen turning off
@@ -557,6 +577,81 @@ public class Launcher extends StatefulActivity<LauncherState>
             getWindow().setSoftInputMode(LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
         }
         setTitle(R.string.home_screen);
+
+        addT1TinyTopOverlay();
+    }
+
+//    private void addT1TinyTopOverlay() {
+//        DragLayer dragLayer = getDragLayer();
+//        LinearLayout overlay = new FullScreenLinearLayout(this);
+//        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+//            ViewGroup.LayoutParams.MATCH_PARENT,
+//            ViewGroup.LayoutParams.MATCH_PARENT,
+//            Gravity.TOP | Gravity.START
+//        );
+//
+//        DeviceProfile dp = getDeviceProfile();
+//        Rect insets = dp.getInsets();
+//        lp.setMargins(insets.left, insets.top, insets.right, insets.bottom);
+//
+//        dragLayer.addView(overlay, lp);
+//        dragLayer.bringChildToFront(overlay);
+//    }
+
+    private void addT1TinyTopOverlay() {
+        // 1) Let us draw behind the system bars
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+
+        // 2) Build our overlay view
+        DragLayer dragLayer = getDragLayer();
+        LinearLayout overlay = new FullScreenLinearLayout(this);
+        FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                Gravity.TOP | Gravity.START
+        );
+
+        DeviceProfile dp = getDeviceProfile();
+        Rect insets = dp.getInsets();
+        lp.setMargins(insets.left, insets.top, insets.right, insets.bottom);
+
+        // 3) Enable immersive-sticky fullscreen
+        final View decor = getWindow().getDecorView();
+        int immersiveFlags = View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
+                | View.SYSTEM_UI_FLAG_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                | View.SYSTEM_UI_FLAG_LAYOUT_STABLE;
+
+        decor.setSystemUiVisibility(immersiveFlags);
+        decor.setOnSystemUiVisibilityChangeListener(visibility -> {
+            if ((visibility & View.SYSTEM_UI_FLAG_FULLSCREEN) == 0) {
+                decor.setSystemUiVisibility(immersiveFlags);
+            }
+        });
+
+        // 4) Add overlay to the DragLayer
+        dragLayer.addView(overlay, lp);
+        dragLayer.bringChildToFront(overlay);
+
+        // 5) Obtain a WindowInsetsControllerCompat via the factory
+        WindowInsetsControllerCompat controller =
+                WindowCompat.getInsetsController(getWindow(), decor);
+
+        // 6) Hide the nav bars
+        controller.hide(WindowInsetsCompat.Type.navigationBars());
+
+        // 7) Check nav-bar visibility with the compat API
+        WindowInsetsCompat insetsCompat = ViewCompat.getRootWindowInsets(decor);
+        boolean navVisible = insetsCompat != null
+                && insetsCompat.isVisible(WindowInsetsCompat.Type.navigationBars());
+
+        Log.d(TAG, "HSH NAV BAR visible? " + navVisible);
+    }
+
+    private float dpToPx(float dp) {
+        return dp * getResources().getDisplayMetrics().density;
     }
 
     /**
